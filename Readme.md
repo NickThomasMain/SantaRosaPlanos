@@ -2,11 +2,11 @@
 
 ## Introducción 
 
-- **Datos de entrada:** aproximadamente **10.000 puntos de elevación** de la región **Santa Rosa de Osos (Antioquia, Colombia)**.  
-- **Estructura general:** una **superficie inclinada de ~60 km**, aunque con variaciones locales significativas en la altura.  
+- **Datos de entrada:** aproximadamente 10.000 puntos de elevación de la región Santa Rosa de Osos (Antioquia, Colombia).  
+- **Estructura general:** una superficie inclinada de ~60 km, aunque con variaciones locales significativas en la altura.  
 - **Objetivo del proyecto:**  
-  - dividir el conjunto de datos en **el menor número posible de planos inclinados** (idealmente **10–15 planos**),  
-  - para poder **analizar relaciones topográficas** y estimar qué superficies podrían ser **más antiguas** que otras.  
+  - dividir el conjunto de datos en el menor número posible de planos inclinados (idealmente **10–15 planos**),  
+  - para poder analizar relaciones topográficas y estimar qué superficies podrían ser más antiguas que otras.  
 - **Motivación:**  
   - un único plano global no describe adecuadamente la región,  
   - se requieren estructuras locales más precisas para la interpretación.  
@@ -61,12 +61,12 @@ Este enfoque lo hace especialmente útil en contextos donde los datos provienen 
 
 ### Por qué RANSAC es mejor que la regresión lineal en este caso
 
-En un conjunto de datos con **puntos de elevación** que pertenecen a **varias superficies planas** (por ejemplo, diferentes techos, terrazas o niveles del terreno), una regresión lineal tradicional intentaría ajustar **una sola superficie** que minimice el error total:
+En un conjunto de datos con puntos de elevación que pertenecen a varias superficies planas (por ejemplo, diferentes techos, terrazas o niveles del terreno), una regresión lineal tradicional intentaría ajustar **una sola superficie** que minimice el error total:
 
-$$
+
 \min_{a,b,c} \sum_i \left(z_i - (a x_i + b y_i + c)\right)^2
-$$
-El resultado sería una **superficie promedio** que no representa correctamente ninguna de las estructuras reales: una mezcla entre techos, suelo y otros elementos.  
+
+El resultado sería una superficie promedio que no representa correctamente ninguna de las estructuras reales: una mezcla entre techos, suelo y otros elementos.  
 Además, los puntos alejados (outliers) influyen fuertemente en el resultado, deformando el plano ajustado.
 
 RANSAC, en cambio:
