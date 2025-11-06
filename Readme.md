@@ -61,12 +61,12 @@ Este enfoque lo hace especialmente útil en contextos donde los datos provienen 
 
 ### Por qué RANSAC es mejor que la regresión lineal en este caso
 
-En un conjunto de datos con puntos de elevación que pertenecen a varias superficies planas (por ejemplo, diferentes techos, terrazas o niveles del terreno), una regresión lineal tradicional intentaría ajustar **una sola superficie** que minimice el error total:
+En un conjunto de datos con **puntos de elevación** que pertenecen a **varias superficies planas** (por ejemplo, diferentes techos, terrazas o niveles del terreno), una regresión lineal tradicional intentaría ajustar **una sola superficie** que minimice el error total:
 
-
+$
 \min_{a,b,c} \sum_i \left(z_i - (a x_i + b y_i + c)\right)^2
-
-El resultado sería una superficie promedio que no representa correctamente ninguna de las estructuras reales: una mezcla entre techos, suelo y otros elementos.  
+$
+El resultado sería una **superficie promedio** que no representa correctamente ninguna de las estructuras reales: una mezcla entre techos, suelo y otros elementos.  
 Además, los puntos alejados (outliers) influyen fuertemente en el resultado, deformando el plano ajustado.
 
 RANSAC, en cambio:
