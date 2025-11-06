@@ -184,8 +184,8 @@ plot_3d_points(
 
 planos = detectar_planos_global(
     "asro_centroides_peaks_mayor_2450.csv",
-    tolerancia=4,
-    n_min=20,
+    tolerancia=6,
+    n_min=100,
     max_iter=30,
     cobertura_objetivo=0.8
 )
