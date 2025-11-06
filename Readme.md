@@ -1,8 +1,33 @@
 # SantaRosaPlanos
 
-## 🧭 Algoritmo RANSAC (RANdom SAmple Consensus)
+## Introducción 
 
-### 📘 Descripción general
+- **Datos de entrada:** aproximadamente **10.000 puntos de elevación** de la región **Santa Rosa de Osos (Antioquia, Colombia)**.  
+- **Estructura general:** una **superficie inclinada de ~60 km**, aunque con variaciones locales significativas en la altura.  
+- **Objetivo del proyecto:**  
+  - dividir el conjunto de datos en **el menor número posible de planos inclinados** (idealmente **10–15 planos**),  
+  - para poder **analizar relaciones topográficas** y estimar qué superficies podrían ser **más antiguas** que otras.  
+- **Motivación:**  
+  - un único plano global no describe adecuadamente la región,  
+  - se requieren estructuras locales más precisas para la interpretación.  
+- **Método utilizado:**  
+  - aplicación del algoritmo **RANSAC**, que permite identificar planos de manera robusta incluso con ruido y valores atípicos.  
+- **Parámetros ajustables:**  
+  - **rango de altura** dentro del cual se busca cada plano,  
+  - **número mínimo de puntos** necesarios para validar un plano.  
+- **Resultado esperado:**  
+  - un conjunto segmentado de varios planos coherentes,  
+  - útil para análisis geomorfológico y para posteriores procesos en GIS.
+
+  <p align="center">
+  <img src="images/newplot.png" alt="Segmentierte Ebenen" width="70%">
+</p>
+
+
+
+## Algoritmo RANSAC (RANdom SAmple Consensus)
+
+### Descripción general
 RANSAC es un algoritmo iterativo diseñado para ajustar un modelo a un conjunto de datos que puede contener una cantidad significativa de valores atípicos (*outliers*).  
 A diferencia de los métodos tradicionales de regresión, RANSAC no intenta minimizar el error global, sino encontrar el modelo que **mejor explica la mayoría de los datos válidos** (*inliers*), ignorando aquellos puntos que no se ajustan al patrón dominante.
 
@@ -10,7 +35,7 @@ Este enfoque lo hace especialmente útil en contextos donde los datos provienen 
 
 ---
 
-### ⚙️ Funcionamiento del algoritmo
+### Funcionamiento del algoritmo
 
 1. **Selección aleatoria de muestras:**  
    Se eligen de manera aleatoria un número mínimo de puntos necesarios para estimar el modelo (por ejemplo, 3 puntos para definir un plano).
@@ -34,7 +59,7 @@ Este enfoque lo hace especialmente útil en contextos donde los datos provienen 
 
 ---
 
-### 🏔️ Por qué RANSAC es mejor que la regresión lineal en este caso
+### Por qué RANSAC es mejor que la regresión lineal en este caso
 
 En un conjunto de datos con **puntos de elevación** que pertenecen a **varias superficies planas** (por ejemplo, diferentes techos, terrazas o niveles del terreno), una regresión lineal tradicional intentaría ajustar **una sola superficie** que minimice el error total:
 
@@ -61,7 +86,7 @@ RANSAC, en cambio:
 
 ---
 
-### ✅ Conclusión
+### Conclusión
 
 RANSAC es el método más adecuado para segmentar un conjunto de puntos de elevación en múltiples planos, ya que:
 - Es **robusto frente a valores atípicos**,

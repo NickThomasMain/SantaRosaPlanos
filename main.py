@@ -6,7 +6,7 @@ import plotly.express as px
 from sklearn.linear_model import RANSACRegressor, LinearRegression
 
 
-def detectar_planos_global(csv_path, tolerancia=6.0, n_min=30, max_iter=10, cobertura_objetivo=0.8):
+def detectar_planos_global(csv_path, tolerancia=4.0, n_min=30, max_iter=10, cobertura_objetivo=0.8):
     """
     Detecta múltiples planos en una nube de puntos completa usando RANSAC de manera iterativa.
     El proceso se detiene cuando se cubre un porcentaje objetivo de los puntos totales.
@@ -176,15 +176,15 @@ def plot_3d_points(
     fig.show()
 
 
-# plot_3d_points(
-#     "asro_centroides_peaks_mayor_2450.csv",
-#     point_size=2,
-#     title="Visualización 3D de puntos"
-# )
+plot_3d_points(
+    "asro_centroides_peaks_mayor_2450.csv",
+    point_size=2,
+    title="Visualización 3D de puntos"
+)
 
 planos = detectar_planos_global(
     "asro_centroides_peaks_mayor_2450.csv",
-    tolerancia=6,
+    tolerancia=4,
     n_min=20,
     max_iter=30,
     cobertura_objetivo=0.8
