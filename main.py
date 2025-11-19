@@ -1,9 +1,8 @@
-from mpl_toolkits.mplot3d import Axes3D
 import pandas as pd
 import numpy as np
-import plotly.express as px
 
 from sklearn.linear_model import RANSACRegressor, LinearRegression
+from vizualication import visualizar_planos_3d, plot_3d_points, visualizar_poligonos_3d
 
 
 def detectar_planos_global(csv_path, tolerancia=4.0, n_min=30, max_iter=10, cobertura_objetivo=0.8):
@@ -125,67 +124,18 @@ def analizar_planos(planos):
 
     return salida
 
-
-def plot_3d_points(
-    csv_path,
-    x_col="east",
-    y_col="north",
-    z_col="altitud",
-    color_col="altitud",
-    color_scale="earth",
-    point_size=3,
-    title="Puntos 3D (interactivo)"
-):
-    """
-    Crea una visualización 3D interactiva de datos puntuales (por ejemplo, puntos DEM).
-
-    Parámetros:
-    ------------
-    csv_path : str
-        Ruta al archivo CSV con los datos de los puntos.
-    x_col, y_col, z_col : str
-        Nombres de las columnas que contienen las coordenadas.
-    color_col : str
-        Columna utilizada para la escala de colores.
-    color_scale : str
-        Nombre de una escala de color válida en Plotly 
-        (por ejemplo, 'earth', 'viridis', 'thermal').
-    point_size : int o float
-        Tamaño de los puntos (por defecto: 3).
-    title : str
-        Título del gráfico.
-    """
-    # Cargar los datos desde el archivo CSV
-    df = pd.read_csv(csv_path)
-
-    # Crear el gráfico 3D
-    fig = px.scatter_3d(
-        df,
-        x=x_col,
-        y=y_col,
-        z=z_col,
-        color=color_col,
-        color_continuous_scale=color_scale,
-        title=title
-    )
-
-    # Ajustar el tamaño de los puntos
-    fig.update_traces(marker=dict(size=point_size))
-
-    # Mostrar el gráfico de forma interactiva
-    fig.show()
+# plot_3d_points(
+#     "asro_centroides_peaks_mayor_2450.csv",
+#     point_size=2,
+#     title="Visualización 3D de puntos"
+# )
 
 
-plot_3d_points(
-    "asro_centroides_peaks_mayor_2450.csv",
-    point_size=2,
-    title="Visualización 3D de puntos"
-)
 
 planos = detectar_planos_global(
     "asro_centroides_peaks_mayor_2450.csv",
     tolerancia=6,
-    n_min=100,
+    n_min=300,
     max_iter=30,
     cobertura_objetivo=0.8
 )
@@ -195,3 +145,7 @@ analisis = analizar_planos(planos)
 
 for p in analisis:
     print(f"Plano {p['id']}: inclinación = {p['pendiente_grados']:.2f}°, dirección = {p['direccion']}, puntos = {len(p['puntos_ids'])}")
+
+# visualizar_planos("asro_centroides_peaks_mayor_2450.csv", planos)
+visualizar_planos_3d("asro_centroides_peaks_mayor_2450.csv", planos)
+#visualizar_poligonos_3d("asro_centroides_peaks_mayor_2450.csv", planos)
