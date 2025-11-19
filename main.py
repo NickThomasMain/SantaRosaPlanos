@@ -4,6 +4,8 @@ import numpy as np
 from sklearn.linear_model import RANSACRegressor, LinearRegression
 from vizualication import visualizar_planos_3d, plot_3d_points, visualizar_poligonos_3d
 
+from noise_removal import filter_main_cluster
+
 
 def detectar_planos_global(csv_path, tolerancia=4.0, n_min=30, max_iter=10, cobertura_objetivo=0.8):
     """
@@ -141,11 +143,29 @@ planos = detectar_planos_global(
 )
 
 
-analisis = analizar_planos(planos)
+# analisis = analizar_planos(planos)
 
-for p in analisis:
-    print(f"Plano {p['id']}: inclinación = {p['pendiente_grados']:.2f}°, dirección = {p['direccion']}, puntos = {len(p['puntos_ids'])}")
+# for p in analisis:
+#     print(f"Plano {p['id']}: inclinación = {p['pendiente_grados']:.2f}°, dirección = {p['direccion']}, puntos = {len(p['puntos_ids'])}")
 
-# visualizar_planos("asro_centroides_peaks_mayor_2450.csv", planos)
-visualizar_planos_3d("asro_centroides_peaks_mayor_2450.csv", planos)
-#visualizar_poligonos_3d("asro_centroides_peaks_mayor_2450.csv", planos)
+# # visualizar_planos("asro_centroides_peaks_mayor_2450.csv", planos)
+# visualizar_planos_3d("asro_centroides_peaks_mayor_2450.csv", planos)
+# #visualizar_poligonos_3d("asro_centroides_peaks_mayor_2450.csv", planos)
+
+def main():
+    df = pd.read_csv("asro_centroides_peaks_mayor_2450.csv")
+
+    # Visualisierungsspalten anlegen
+    df["x"] = df["east"]
+    df["y"] = df["north"]
+    df["z"] = df["altitud"]
+
+    df_clean, labels_clean = filter_main_cluster(
+        df,
+        min_cluster_size=400,
+        min_samples=20,
+        visualize=True
+    )
+
+if __name__ == "__main__":
+    main()
