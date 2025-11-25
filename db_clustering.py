@@ -11,8 +11,7 @@ from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
 import plotly.express as px
 import plotly.graph_objects as go
-from hdbscan import HDBSCAN
-
+import hdbscan
 # ----------------------------------------------------------
 # 1) Cargar datos
 # ----------------------------------------------------------
@@ -146,6 +145,62 @@ def build_feature_vector(
     return features_weighted, df_feat
 
 
+
+def build_feature_vector2(
+        df,
+        k_neighbors=20,
+        w_x=1.0, w_y=1.0, w_z=1.0,
+        w_nx=0, w_ny=0, w_nz=0,
+        w_slope=3.0,
+        normalize=True
+    ):
+    """
+    Construye un vector de características para clustering 3D usando:
+    x,y,z, normales (nx,ny,nz) y pendiente.
+
+    - Las normales y la pendiente se calculan sobre las coordenadas originales.
+    - Luego se aplica una ponderación independiente a cada feature.
+    - Finalmente puede normalizarse (StandardScaler).
+
+    Retorna:
+    - features_weighted : matriz de features lista para HDBSCAN
+    - df_feat : DataFrame extendido con columnas adicionales
+    """
+
+    df_feat = df.copy()
+
+    # --- 1) Calcular normales sobre puntos sin ponderar ---
+    normals = compute_normals(df_feat, k_neighbors=k_neighbors)
+    df_feat["nx"] = normals[:, 0]
+    df_feat["ny"] = normals[:, 1]
+    df_feat["nz"] = normals[:, 2]
+
+    # --- 2) Calcular pendiente desde las normales ---
+    df_feat["slope"] = compute_slope(normals)
+
+    # --- 3) Vector de features sin pesos ---
+    features_raw = np.column_stack([
+        df_feat["x"].values,
+        df_feat["y"].values,
+        df_feat["z"].values,
+        df_feat["nx"].values,
+        df_feat["ny"].values,
+        df_feat["nz"].values,
+        df_feat["slope"].values
+    ])
+
+    # --- 4) Aplicar pesos (broadcasting) ---
+    weights = np.array([w_x, w_y, w_z, w_nx, w_ny, w_nz, w_slope], dtype=float)
+    features_weighted = features_raw * weights
+
+    # --- 5) Normalización opcional ---
+    if normalize:
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        features_weighted = scaler.fit_transform(features_weighted)
+
+    return features_weighted, df_feat
+
 # ----------------------------------------------------------
 # 3) Clustering con DBSCAN
 # ----------------------------------------------------------
@@ -250,10 +305,82 @@ def visualize_clusters(df, labels, title_text="DBSCAN – Clústeres básicos", 
 
     fig.show()
 
+
+def run_hdbscan(
+        df_clean,
+        min_cluster_size=150,
+        min_samples=10,
+        visualize=False
+    ):
+    """
+    Ejecuta un clustering HDBSCAN sobre un DataFrame previamente filtrado.
+    Se basa en las columnas 'x', 'y', 'z' y retorna las etiquetas del clustering.
+
+    Parámetros
+    ----------
+    df_clean : pandas.DataFrame
+        DataFrame ya filtrado (por ejemplo, usando filter_main_cluster()).
+    min_cluster_size : int
+        Tamaño mínimo para formar un clúster válido.
+    min_samples : int
+        Número mínimo de muestras internas para mayor robustez.
+    visualize : bool
+        Si es True, muestra una visualización 3D del clustering final.
+
+    Retorna
+    -------
+    labels : ndarray
+        Etiquetas de los clústeres calculados por HDBSCAN.
+    clusterer : HDBSCAN
+        El objeto de HDBSCAN ya entrenado.
+    """
+
+    # ----------------------------------------------------------
+    # 1) Extraer coordenadas espaciales
+    # ----------------------------------------------------------
+    X = df_clean[["x", "y", "z"]].values
+
+    
+    features, df_feat = build_feature_vector2(
+            df_clean
+        )
+    # ----------------------------------------------------------
+    # 2) Ejecutar HDBSCAN en la nube filtrada
+    # ----------------------------------------------------------
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=min_cluster_size,
+        min_samples=min_samples,
+        cluster_selection_method="eom",
+        metric="manhattan"
+    )
+
+    labels = clusterer.fit_predict(features)
+
+    print("Número de clústeres encontrados (excluyendo ruido):",
+          len(set(labels[labels >= 0])))
+
+    print("Puntos de ruido:", np.sum(labels == -1))
+
+    # ----------------------------------------------------------
+    # 3) Visualización opcional
+    # ----------------------------------------------------------
+    if visualize:
+        try:
+            visualize_clusters(
+                df_clean,
+                labels,
+                title_text="HDBSCAN – Clústeres sobre la nube filtrada",
+                point_size=2
+            )
+        except Exception as e:
+            print("⚠️ Error durante la visualización:", e)
+
+    return labels, clusterer
+
 # ----------------------------------------------------------
 # 5) Pipeline principal
 # ----------------------------------------------------------
-def main(csv_path, mode="features", k_neighbors=20,
+def weighted_clustering(csv_path, mode="features", k_neighbors=20,
          w_x=1.0, w_y=1.0, w_z=1.0,
          w_nx=1.0, w_ny=1.0, w_nz=1.0,
          w_slope=1.0,
@@ -302,10 +429,10 @@ def main(csv_path, mode="features", k_neighbors=20,
 
 
 
-main("asro_centroides_peaks_mayor_2450.csv",
-     mode="features",
-     k_neighbors=20,
-     w_x=1.0, w_y=1.0, w_z=3.0,
-     w_nx=1.0, w_ny=1.0, w_nz=3.0,
-     w_slope=2.0,
-     dbscan_eps=0.8, dbscan_min_samples=30)
+    # weighted_clustering("asro_centroides_peaks_mayor_2450.csv",
+    #  mode="features",
+    #  k_neighbors=20,
+    #  w_x=1.0, w_y=1.0, w_z=3.0,
+    #  w_nx=1.0, w_ny=1.0, w_nz=3.0,
+    #  w_slope=2.0,
+    #  dbscan_eps=0.8, dbscan_min_samples=30)
