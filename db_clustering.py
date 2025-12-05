@@ -1,9 +1,3 @@
-"""
-Módulo principal para clustering básico usando DBSCAN.
-Los comentarios y docstrings están en español.
-La explicación conceptual se mantiene en alemán.
-"""
-
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -12,6 +6,7 @@ from sklearn.neighbors import NearestNeighbors
 import plotly.express as px
 import plotly.graph_objects as go
 import hdbscan
+
 # ----------------------------------------------------------
 # 1) Cargar datos
 # ----------------------------------------------------------
@@ -66,25 +61,57 @@ def scale_features(df, z_weight=1.5):
     return pts_scaled, scaler, df_mod
 
 
-def compute_normals(df, k_neighbors=20):
+def compute_normals(df, k_neighbors=30):
     """
-    Calcula normales locales mediante PCA en la vecindad k.
-    Devuelve Nx3 componentes.
+    Berechnet robuste, ausgerichtete Normalen mittels PCA über k-Nachbarn.
+
+    Parameter
+    ---------
+    df : DataFrame mit Spalten ['x','y','z']
+    k_neighbors : int
+        Anzahl KNN für die lokale Flächenapproximation.
+
+    Returns
+    -------
+    normals : ndarray (N,3)
+        Ausgerichtete und normalisierte Normalenvektoren.
     """
-    pts = df[["x", "y", "z"]].values
-    nbrs = NearestNeighbors(n_neighbors=k_neighbors).fit(pts)
-    _, indices = nbrs.kneighbors(pts)
 
-    normals = np.zeros((len(df), 3))
+    points = df[["x", "y", "z"]].values
+    N = len(points)
 
-    for i in range(len(df)):
-        nb_pts = pts[indices[i]]  # vecinos
-        cov = np.cov(nb_pts.T)    # matriz covarianza
+    if N < k_neighbors:
+        raise ValueError("Zu wenige Punkte für Normalenberechnung.")
+
+    # --- 1) KNN Suche (KD-Tree) ---
+    nn = NearestNeighbors(n_neighbors=k_neighbors, algorithm='kd_tree')
+    nn.fit(points)
+    distances, indices = nn.kneighbors(points)
+
+    normals = np.zeros((N, 3), dtype=float)
+
+    # --- 2) PCA pro Punkt ---
+    for i in range(N):
+        neigh = points[indices[i]]
+        cov = np.cov(neigh.T)
+
+        # Eigenzerlegung
         eigvals, eigvecs = np.linalg.eigh(cov)
-        normal = eigvecs[:, np.argmin(eigvals)]  # vector menor → normal
+
+        # Kleinster Eigenwert -> Normalenrichtung
+        normal = eigvecs[:, np.argmin(eigvals)]
+
+        # Normalisieren
+        normal /= np.linalg.norm(normal) + 1e-12
+
         normals[i] = normal
 
+    # --- 3) Orientierung erzwingen: Normalen zeigen nach oben ---
+    flip_mask = normals[:, 2] < 0
+    normals[flip_mask] *= -1
+
     return normals
+
 
 def compute_slope(normals):
     """
@@ -145,74 +172,6 @@ def build_feature_vector(
     return features_weighted, df_feat
 
 
-
-def build_feature_vector2(
-        df,
-        k_neighbors=20,
-        w_x=1.0, w_y=1.0, w_z=1.0,
-        w_nx=0, w_ny=0, w_nz=0,
-        w_slope=3.0,
-        normalize=True
-    ):
-    """
-    Construye un vector de características para clustering 3D usando:
-    x,y,z, normales (nx,ny,nz) y pendiente.
-
-    - Las normales y la pendiente se calculan sobre las coordenadas originales.
-    - Luego se aplica una ponderación independiente a cada feature.
-    - Finalmente puede normalizarse (StandardScaler).
-
-    Retorna:
-    - features_weighted : matriz de features lista para HDBSCAN
-    - df_feat : DataFrame extendido con columnas adicionales
-    """
-
-    df_feat = df.copy()
-
-    # --- 1) Calcular normales sobre puntos sin ponderar ---
-    normals = compute_normals(df_feat, k_neighbors=k_neighbors)
-    df_feat["nx"] = normals[:, 0]
-    df_feat["ny"] = normals[:, 1]
-    df_feat["nz"] = normals[:, 2]
-
-    # --- 2) Calcular pendiente desde las normales ---
-    df_feat["slope"] = compute_slope(normals)
-
-    # --- 3) Vector de features sin pesos ---
-    features_raw = np.column_stack([
-        df_feat["x"].values,
-        df_feat["y"].values,
-        df_feat["z"].values,
-        df_feat["nx"].values,
-        df_feat["ny"].values,
-        df_feat["nz"].values,
-        df_feat["slope"].values
-    ])
-
-    # --- 4) Aplicar pesos (broadcasting) ---
-    weights = np.array([w_x, w_y, w_z, w_nx, w_ny, w_nz, w_slope], dtype=float)
-    features_weighted = features_raw * weights
-
-    # --- 5) Normalización opcional ---
-    if normalize:
-        from sklearn.preprocessing import StandardScaler
-        scaler = StandardScaler()
-        features_weighted = scaler.fit_transform(features_weighted)
-
-    return features_weighted, df_feat
-
-# ----------------------------------------------------------
-# 3) Clustering con DBSCAN
-# ----------------------------------------------------------
-def run_dbscan(points_scaled, eps=0.5, min_samples=100):
-    """
-    Ejecuta DBSCAN sobre los puntos ya escalados.
-    Retorna los labels para cada punto.
-    """
-    db = DBSCAN(eps=eps, min_samples=min_samples)
-    labels = db.fit_predict(points_scaled)
-    return labels
-
 # ----------------------------------------------------------
 # 3) Curva K-distancia para elegir eps
 # ----------------------------------------------------------
@@ -237,6 +196,19 @@ def plot_k_distance(points_scaled, k=100):
         yaxis_title=f"Distancia al {k}-ésimo vecino"
     )
     fig.show()
+
+# ----------------------------------------------------------
+# 3) Clustering con DBSCAN
+# ----------------------------------------------------------
+def run_dbscan(points_scaled, eps=0.5, min_samples=100):
+    """
+    Ejecuta DBSCAN sobre los puntos ya escalados.
+    Retorna los labels para cada punto.
+    """
+    db = DBSCAN(eps=eps, min_samples=min_samples)
+    labels = db.fit_predict(points_scaled)
+    return labels
+
 
 
 # ----------------------------------------------------------
@@ -305,77 +277,6 @@ def visualize_clusters(df, labels, title_text="DBSCAN – Clústeres básicos", 
 
     fig.show()
 
-
-def run_hdbscan(
-        df_clean,
-        min_cluster_size=150,
-        min_samples=10,
-        visualize=False
-    ):
-    """
-    Ejecuta un clustering HDBSCAN sobre un DataFrame previamente filtrado.
-    Se basa en las columnas 'x', 'y', 'z' y retorna las etiquetas del clustering.
-
-    Parámetros
-    ----------
-    df_clean : pandas.DataFrame
-        DataFrame ya filtrado (por ejemplo, usando filter_main_cluster()).
-    min_cluster_size : int
-        Tamaño mínimo para formar un clúster válido.
-    min_samples : int
-        Número mínimo de muestras internas para mayor robustez.
-    visualize : bool
-        Si es True, muestra una visualización 3D del clustering final.
-
-    Retorna
-    -------
-    labels : ndarray
-        Etiquetas de los clústeres calculados por HDBSCAN.
-    clusterer : HDBSCAN
-        El objeto de HDBSCAN ya entrenado.
-    """
-
-    # ----------------------------------------------------------
-    # 1) Extraer coordenadas espaciales
-    # ----------------------------------------------------------
-    X = df_clean[["x", "y", "z"]].values
-
-    
-    features, df_feat = build_feature_vector2(
-            df_clean
-        )
-    # ----------------------------------------------------------
-    # 2) Ejecutar HDBSCAN en la nube filtrada
-    # ----------------------------------------------------------
-    clusterer = hdbscan.HDBSCAN(
-        min_cluster_size=min_cluster_size,
-        min_samples=min_samples,
-        cluster_selection_method="eom",
-        metric="manhattan"
-    )
-
-    labels = clusterer.fit_predict(features)
-
-    print("Número de clústeres encontrados (excluyendo ruido):",
-          len(set(labels[labels >= 0])))
-
-    print("Puntos de ruido:", np.sum(labels == -1))
-
-    # ----------------------------------------------------------
-    # 3) Visualización opcional
-    # ----------------------------------------------------------
-    if visualize:
-        try:
-            visualize_clusters(
-                df_clean,
-                labels,
-                title_text="HDBSCAN – Clústeres sobre la nube filtrada",
-                point_size=2
-            )
-        except Exception as e:
-            print("⚠️ Error durante la visualización:", e)
-
-    return labels, clusterer
 
 # ----------------------------------------------------------
 # 5) Pipeline principal

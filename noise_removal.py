@@ -6,19 +6,14 @@ import plotly.express as px
 from db_clustering import visualize_clusters
 
 
-import numpy as np
-import hdbscan
-
 def filter_main_cluster(
         df,
         min_cluster_size=400,
-        min_samples=20,
-        visualize=False
+        min_samples=20
     ):
     """
     Realiza un clustering con HDBSCAN sobre un DataFrame que contiene
     las columnas 'x', 'y', 'z' y devuelve únicamente el clúster más grande.
-    Opcionalmente visualiza los clústeres antes y después del filtrado.
 
     Parámetros
     ----------
@@ -28,8 +23,6 @@ def filter_main_cluster(
         Tamaño mínimo de un clúster para HDBSCAN.
     min_samples : int
         Número mínimo de muestras para un clustering más robusto.
-    visualize : bool
-        Si es True, visualiza los clústeres antes y después del filtrado.
 
     Retorna
     -------
@@ -55,13 +48,6 @@ def filter_main_cluster(
 
     labels = clusterer.fit_predict(X)
 
-    # ---- Visualización previa (si se solicita) ----
-    if visualize:
-        try:
-            visualize_clusters(df, labels, title_text="HDBSCAN – Clústeres antes del filtrado", point_size=2)
-        except Exception as e:
-            print("⚠️ Error durante la visualización previa:", e)
-
     # ----------------------------------------------------------
     # 3) Identificar el clúster más grande (excluyendo ruido)
     # ----------------------------------------------------------
@@ -79,11 +65,5 @@ def filter_main_cluster(
     print("Puntos en el clúster principal:", len(df_clean))
     print("Puntos eliminados:", len(df) - len(df_clean))
 
-    # ---- Visualización posterior (si se solicita) ----
-    if visualize:
-        try:
-            visualize_clusters(df_clean, labels_clean, title_text="HDBSCAN – Clúster principal (filtrado)", point_size=2)
-        except Exception as e:
-            print("⚠️ Error durante la visualización posterior:", e)
 
     return df_clean, labels_clean

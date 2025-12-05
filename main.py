@@ -2,15 +2,11 @@ import pandas as pd
 import numpy as np
 
 from sklearn.linear_model import RANSACRegressor, LinearRegression
-from vizualication import visualizar_planos_3d2, plot_3d_points, visualizar_poligonos_3d
+from vizualication import visualizar_planos_3d, visualizar_nube_3d
 
 from noise_removal import filter_main_cluster
-from db_clustering import run_hdbscan, weighted_clustering
+from hdb_clustering import run_hdbscan, grid_search_weights, feature_vector
 
-
-import numpy as np
-import pandas as pd
-from sklearn.linear_model import RANSACRegressor, LinearRegression
 
 def detectar_planos_pipeline(
         df,
@@ -195,17 +191,10 @@ def analizar_planos(planos):
             "id": plano["id"],
             "pendiente_grados": round(pendiente_grados, 2),
             "direccion": direccion,
-            "puntos_ids": plano["puntos_ids"].tolist() if hasattr(plano["puntos_ids"], 'tolist') else plano["puntos_ids"]
+            "puntos_idx": plano["puntos_idx"].tolist() if hasattr(plano["puntos_idx"], 'tolist') else plano["puntos_idx"]
         })
 
     return salida
-
-# plot_3d_points(
-#     "asro_centroides_peaks_mayor_2450.csv",
-#     point_size=2,
-#     title="Visualización 3D de puntos"
-# )
-
 
 
 # planos = detectar_planos_global(
@@ -217,12 +206,6 @@ def analizar_planos(planos):
 # )
 
 
-# for p in analisis:
-#     print(f"Plano {p['id']}: inclinación = {p['pendiente_grados']:.2f}°, dirección = {p['direccion']}, puntos = {len(p['puntos_ids'])}")
-
-# visualizar_planos("asro_centroides_peaks_mayor_2450.csv", planos)
-# visualizar_planos_3d("asro_centroides_peaks_mayor_2450.csv", planos)
-# visualizar_poligonos_3d("asro_centroides_peaks_mayor_2450.csv", planos)
 
 def main():
     df = pd.read_csv("asro_centroides_peaks_mayor_2450.csv")
@@ -233,37 +216,82 @@ def main():
     df["y"] = df["north"]
     df["z"] = df["altitud"]
 
+    visualizar_nube_3d(df)
+
     df_clean, labels_clean = filter_main_cluster(
         df,
         min_cluster_size=400,
-        min_samples=20,
-        visualize=False
+        min_samples=20
     )
 
-    labels_hdbscan, clusterer = run_hdbscan(
-        df_clean,
-        min_cluster_size=100,
-        min_samples=12,
-        visualize=True
-    )
+    visualizar_nube_3d(df_clean)
 
-    df_clean["cluster"] = labels_hdbscan
-    results = detectar_planos_pipeline(
-        df_clean,
-        labels=labels_hdbscan, 
-        per_cluster=True,
-        tolerancia=6,
-        n_min=30
-    )
+    # weight_grid = {
+    #     "w_xy": [1.0, 2.0],      # gemeinsames Gewicht für x und y
+    #     "w_z": [1.0, 2.0],
+    #     "w_nxy": [0],         # gemeinsames Gewicht für nx und ny
+    #     "w_nz": [0],
+    #     "w_slope": [2.0, 4.0]
+    # }
 
-    print("Fertige Ebenen:", len(results))
+    # results = grid_search_weights(df_clean, weight_grid)
 
-    all_planes = []
-    for cluster_id, planes in results.items():
-        all_planes.extend(planes)
+    # final_outputs = []
+    # top3 = results[:3]
 
-    #analisis = analizar_planos(planes)
-    visualizar_planos_3d2(df_clean, all_planes)
+    # for entry in top3:
+    #     params = entry["params"]
+
+    #     # HDBSCAN erneut mit den selektierten Gewichten
+    #     features, df_feat, local_scale = feature_vector(df_clean, **params)
+
+    #     labels_hdb, clusterer = run_hdbscan(
+    #         df_clean,
+    #         visualize=True,
+    #         features_override=features
+    #     )
+
+    #     df_tmp = df_clean.copy()
+    #     df_tmp["cluster"] = labels_hdb
+
+    #     # Ebenen detektieren
+    #     planes = detectar_planos_pipeline(
+    #         df_tmp,
+    #         labels=labels_hdb,
+    #         per_cluster=True,
+    #         tolerancia=6,
+    #         n_min=30
+    #     )
+
+    #     num_planes = sum(len(v) for v in planes.values())
+
+    #     final_outputs.append({
+    #         "params": params,
+    #         "labels": labels_hdb,
+    #         "planes": planes,
+    #         "num_planes": num_planes
+    #     })
+
+
+    # # 1) Bestes Ergebnis auswählen
+    # # Beispielkriterium: maximale Ebenenzahl
+    # best_output = max(final_outputs, key=lambda x: x["num_planes"])
+
+    # best_labels = best_output["labels"]
+    # best_planes = best_output["planes"]
+
+    # print("Beste Parameter:", best_output["params"])
+    # print("Anzahl gefundener Ebenen:", best_output["num_planes"])
+
+    # # 2) Visualisierung vorbereiten
+    # df_clean["cluster"] = best_labels
+
+    # all_planes = []
+    # for cluster_id, planes in best_planes.items():
+    #     all_planes.extend(planes)
+
+    # # 3) Visualisieren
+    # visualizar_planos_3d(df_clean, all_planes)
 
 
 if __name__ == "__main__":
