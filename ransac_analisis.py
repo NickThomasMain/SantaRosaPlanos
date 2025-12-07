@@ -470,7 +470,7 @@ def ejecutar_analisis_planos(
 
 # Llamada de ejemplo (parámetros por defecto ajustados en la invocación original)
 ejecutar_analisis_planos(
-    ruta_csv="asro_centroides_peaks_mayor_2450.csv",
+    ruta_csv="data/asro_centroides_peaks_mayor_2450.csv",
     tolerancia=6,
     n_min=200,
     max_iter=30,

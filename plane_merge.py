@@ -2,30 +2,26 @@ import pandas as pd
 import numpy as np
 
 from sklearn.linear_model import RANSACRegressor, LinearRegression
-from vizualication import visualizar_planos_3d2
+from vizualication import visualizar_planos_3d
 from noise_removal import filter_main_cluster
 
 
 def apply_tiling(df, tile_size=5000):
+    """
+    Aplica un proceso de 'tiling' (división espacial) a la nube de puntos.
+    """
     df = df.copy()
     df["tile_x"] = (df["east"]  // tile_size).astype(int)
     df["tile_y"] = (df["north"] // tile_size).astype(int)
     return df
 
-def tiles_adjacent(t1, t2):
-    return max(abs(t1[0] - t2[0]), abs(t1[1] - t2[1])) <= 1
-
 
 def detectar_planos_global(df, tolerancia=None, n_min=30,
-                           max_iter=10, cobertura_objetivo=0.8,
-                           max_north_extent=20000):
+                           max_iter=10, cobertura_objetivo=0.8):
     """
-    Detecta planos globales usando RANSAC,
-    rechazando planos cuya extensión norte-sur exceda max_north_extent.
+    Detecta planos globales mediante RANSAC con eliminación iterativa de inliers.
     """
-
     puntos = df[["east", "north", "altitud"]].to_numpy()
-
     total_puntos = len(puntos)
     idx_global = df.index.to_numpy()
 
@@ -55,23 +51,8 @@ def detectar_planos_global(df, tolerancia=None, n_min=30,
 
         coef = ransac.estimator_.coef_
         intercept = ransac.estimator_.intercept_
-
         puntos_ids = idx_global[inliers]
 
-        # ✅ NEW — compute north-extent of this plane
-        north_vals = df.loc[puntos_ids, "north"].to_numpy()
-        north_extent = north_vals.max() - north_vals.min()
-
-        # ✅ Reject plane if too large
-        if north_extent > max_north_extent:
-            print(f"⚠️ Plano rechazado por tamaño norte ({north_extent:.1f} m > {max_north_extent})")
-
-            # ❗ DO NOT remove points — keep searching in same data
-            # But avoid infinite loop: skip this iteration and continue
-            # (RANSAC next round will find different plane)
-            continue
-
-        # ✅ Plane accepted
         planos.append({
             "id": len(planos) + 1,
             "coef": coef,
@@ -79,12 +60,11 @@ def detectar_planos_global(df, tolerancia=None, n_min=30,
             "puntos_idx": puntos_ids,
         })
 
-        # Remove inliers for next iteration
         puntos = puntos[~inliers]
         idx_global = idx_global[~inliers]
 
         cobertura_actual = (total_puntos - len(puntos)) / total_puntos
-        print(f"Iter {i+1}: {n_inliers} puntos, cobertura = {cobertura_actual:.2%}, north_extent = {north_extent:.1f} m ✅")
+        print(f"Iter {i+1}: {n_inliers} puntos, cobertura = {cobertura_actual:.2%}")
 
         if cobertura_actual >= cobertura_objetivo:
             break
@@ -92,156 +72,13 @@ def detectar_planos_global(df, tolerancia=None, n_min=30,
     return planos
 
 
-
-
-def merge_planes(planos, df,
-                 angle_thresh=np.deg2rad(5),
-                 offset_thresh=3.0,
-                 height_tolerance=6.0):
-
-    def plane_to_normal(a, b):
-        return np.array([a, b, -1.0])
-
-    def fit_plane(points):
-        centroid = np.mean(points, axis=0)
-        _, _, vh = np.linalg.svd(points - centroid)
-        normal = vh[-1]
-        d = -np.dot(normal, centroid)
-        return normal, d
-
-    def max_height_error(points, normal, d):
-        distances = (points @ normal + d) / np.linalg.norm(normal)
-        return np.max(np.abs(distances))
-
-    merged = True
-
-    # Koordinaten-Array passend zu df.index
-    coords = df[["east", "north", "altitud"]].to_numpy()
-
-    merge_round = 1
-
-    while merged:
-        print(f"\n--- Merge Runde {merge_round} ---")
-        merged = False
-        new_planos = []
-        skip = set()
-
-        for i in range(len(planos)):
-            if i in skip:
-                continue
-
-            base = planos[i]
-            a1, b1 = base["coef"]
-            c1 = base["intercept"]
-
-            base_normal = plane_to_normal(a1, b1)
-
-            # 🔥 korrekt: puntos_idx -> Positionen in coords
-            base_points = coords[ df.index.get_indexer(base["puntos_idx"]) ]
-
-            best_merge = None
-
-            for j in range(i + 1, len(planos)):
-                if j in skip:
-                    # Tiles müssen benachbart sein
-                    if not tiles_adjacent(base.get("tile"), comp.get("tile")):
-                        continue
-
-                    
-
-                comp = planos[j]
-                a2, b2 = comp["coef"]
-                c2 = comp["intercept"]
-
-                comp_normal = plane_to_normal(a2, b2)
-
-                # Winkel zwischen Normalen
-                angle = np.arccos(
-                    np.clip(
-                        np.dot(base_normal, comp_normal) /
-                        (np.linalg.norm(base_normal) * np.linalg.norm(comp_normal)),
-                        -1, 1
-                    )
-                )
-
-                if angle > angle_thresh:
-                    continue
-
-                if abs(c1 - c2) > offset_thresh:
-                    continue
-
-                # 🔥 Punkte des Vergleichsplanes holen
-                comp_points = coords[ df.index.get_indexer(comp["puntos_idx"]) ]
-
-                # 🔥 Vereinigung der Punkte
-                candidate_points = np.vstack([base_points, comp_points])
-
-                # Neue Ebene fitten
-                normal_new, d_new = fit_plane(candidate_points)
-
-                # Prüfung des maximalen Höhenfehlers
-                if max_height_error(candidate_points, normal_new, d_new) <= height_tolerance:
-                    best_merge = (
-                        candidate_points,
-                        normal_new, d_new,
-                        base["puntos_idx"],
-                        comp["puntos_idx"]
-                    )
-
-                    skip.add(j)
-
-                    print(f"✅ Merge: Plano {base['id']}  +  Plano {comp['id']}")
-
-            # Falls ein Merge gefunden wurde
-            if best_merge is not None:
-                pts, normal_new, d_new, ids1, ids2 = best_merge
-
-                merged_ids = np.concatenate([ids1, ids2])  # echte df-Indices
-
-                # Neue Koeffizienten
-                a_new = -normal_new[0] / normal_new[2]
-                b_new = -normal_new[1] / normal_new[2]
-                c_new = -d_new / normal_new[2]
-
-                new_planos.append({
-                    "id": len(new_planos) + 1,
-                    "coef": np.array([a_new, b_new]),
-                    "intercept": c_new,
-                    "puntos_idx": merged_ids     # 🔥 nur noch puntos_idx
-                })
-
-                merged = True
-
-            else:
-                new_planos.append(base)
-
-        planos = new_planos
-        merge_round += 1
-
-    print(f"\n✅ Final: {len(planos)} Planos nach Merging\n")
-    return planos
-
-
 def analizar_planos(planos):
     """
-    Analiza una lista de planos detectados y calcula su inclinación y dirección principal.
-
-    Parámetros:
-    ------------
-    planos : list[dict]
-        Lista generada por detectar_planos_global(), que contiene coeficientes 'coef' y 'puntos_ids'.
-
-    Devuelve:
-    -----------
-    lista de diccionarios con:
-        - id: número de plano
-        - pendiente_grados: inclinación del plano en grados
-        - direccion: orientación principal (N, NE, E, SE, S, SW, W, NW)
-        - puntos_ids: índices de los puntos pertenecientes al plano
+    Calcula pendiente e inclinación cardinal para cada plano detectado.
     """
 
     def calcular_orientacion(a, b):
-        """Calcula la orientación cardinal basada en los coeficientes del plano."""
+        """Calcula la orientación cardinal principal."""
         angulo_rad = np.arctan2(b, a)
         angulo_deg = (np.degrees(angulo_rad) + 360) % 360
         direcciones = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
@@ -249,6 +86,7 @@ def analizar_planos(planos):
         return direcciones[idx]
 
     salida = []
+
     for plano in planos:
         a, b = plano["coef"]
         pendiente_rad = np.arctan(np.sqrt(a**2 + b**2))
@@ -259,71 +97,120 @@ def analizar_planos(planos):
             "id": plano["id"],
             "pendiente_grados": round(pendiente_grados, 2),
             "direccion": direccion,
-            "puntos_idx": plano["puntos_idx"].tolist() if hasattr(plano["puntos_idx"], 'tolist') else plano["puntos_idx"]
+            "puntos_idx": (
+                plano["puntos_idx"].tolist()
+                if hasattr(plano["puntos_idx"], 'tolist')
+                else plano["puntos_idx"]
+            )
         })
 
     return salida
 
-df = pd.read_csv("asro_centroides_peaks_mayor_2450.csv")
-df["orig_id"] = df.index
 
-# Visualisierungsspalten anlegen
-df["x"] = df["east"]
-df["y"] = df["north"]
-df["z"] = df["altitud"]
+# ============================================================
+# EJECUTA TODA LA PIPELINE
+# ============================================================
 
-df_clean, labels_clean = filter_main_cluster(
-    df,
-    min_cluster_size=400,
-    min_samples=20,
-    visualize=False
-)
-
-# 1) Tiles erzeugen
-df_tiled = apply_tiling(df_clean, tile_size=20000)
-
-# 2) detectar_planos_global pro Tile ausführen
-planos = []
-
-for (tx, ty), chunk in df_tiled.groupby(["tile_x", "tile_y"]):
-
-    if len(chunk) < 200:   # dein n_min
-        continue
-
-    planos_tile = detectar_planos_global(
-        chunk,
+def ejecutar_pipeline_planos(
+        ruta_csv="data/asro_centroides_peaks_mayor_2450.csv",
+        tile_size=20000,
         tolerancia=6,
         n_min=200,
         max_iter=30,
-        cobertura_objetivo=0.8
+        cobertura_objetivo=0.8,
+        min_cluster_size=400,
+        min_samples=20):
+    """
+    Ejecuta toda la pipeline de detección y análisis de planos:
+    - Carga de datos
+    - Filtrado de ruido
+    - Tiling espacial
+    - Detección de planos por RANSAC
+    - Análisis geométrico
+    - Visualización 3D final
+
+    Parámetros
+    ----------
+    ruta_csv : str
+        Ruta al archivo CSV con columnas 'east', 'north', 'altitud'.
+    tile_size : int
+        Tamaño del mosaico espacial.
+    tolerancia : float
+        Umbral de RANSAC (residual_threshold).
+    n_min : int
+        Mínimo de puntos para aceptar un plano.
+    max_iter : int
+        Máximo de iteraciones RANSAC por tile.
+    cobertura_objetivo : float
+        Proporción mínima cubierta por los planos.
+    min_cluster_size : int
+        Tamaño mínimo de clúster para filtrado de ruido.
+    min_samples : int
+        Min_samples para la etapa de filtrado.
+
+    Devuelve
+    --------
+    dict
+        Resultados completos de la ejecución:
+        - df_clean
+        - planos
+        - analisis
+    """
+
+    print("Cargando datos...")
+    df = pd.read_csv(ruta_csv)
+    df["orig_id"] = df.index
+    df["x"] = df["east"]
+    df["y"] = df["north"]
+    df["z"] = df["altitud"]
+
+    print("Filtrando ruido...")
+    df_clean, labels_clean = filter_main_cluster(
+        df,
+        min_cluster_size=min_cluster_size,
+        min_samples=min_samples
     )
 
-    for p in planos_tile:
-        p["tile"] = (tx, ty)
+    print("Aplicando tiling espacial...")
+    df_tiled = apply_tiling(df_clean, tile_size=tile_size)
 
-    planos.extend(planos_tile)
+    print("Detectando planos por tile...")
+    planos = []
+    for (tx, ty), chunk in df_tiled.groupby(["tile_x", "tile_y"]):
+
+        if len(chunk) < n_min:
+            continue
+
+        planos_tile = detectar_planos_global(
+            chunk,
+            tolerancia=tolerancia,
+            n_min=n_min,
+            max_iter=max_iter,
+            cobertura_objetivo=cobertura_objetivo
+        )
+
+        for p in planos_tile:
+            p["tile"] = (tx, ty)
+
+        planos.extend(planos_tile)
+
+    print("Analizando geometría de los planos...")
+    analisis = analizar_planos(planos)
+
+    for p in analisis:
+        print(f"Plano {p['id']}: "
+              f"inclinación = {p['pendiente_grados']:.2f}°, "
+              f"dirección = {p['direccion']}, "
+              f"puntos = {len(p['puntos_idx'])}")
+
+    print("Generando visualización 3D...")
+    visualizar_planos_3d(df_clean, planos)
+
+    return {
+        "df_clean": df_clean,
+        "planos": planos,
+        "analisis": analisis
+    }
 
 
-
-analisis = analizar_planos(planos)
-
-for p in analisis:
-    print(f"Plano {p['id']}: inclinación = {p['pendiente_grados']:.2f}°, dirección = {p['direccion']}, puntos = {len(p['puntos_idx'])}")
-
-
-
-planos2 = merge_planes(
-    planos,
-    df=df_clean,
-    angle_thresh=np.deg2rad(0.2),
-    offset_thresh=1000,
-    height_tolerance=40
-)
-
-
-analisis = analizar_planos(planos2)
-
-for p in analisis:
-    print(f"Plano {p['id']}: inclinación = {p['pendiente_grados']:.2f}°, dirección = {p['direccion']}, puntos = {len(p['puntos_idx'])}")
-
-visualizar_planos_3d2(df_clean, planos2)
+ejecutar_pipeline_planos()
