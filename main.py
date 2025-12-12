@@ -283,15 +283,15 @@ def main():
     # ---------------------------
     # Grid search de pesos
     # ---------------------------
-    steps = np.arange(1, 4.01, 0.5)
-    steps_xy = np.arange(1, 2.01, 0.5)
+    steps = [1.0, 2.5, 4.0]
+    steps_xy = [1.0, 2.0]
 
     weight_grid = {
-        "w_xy": steps_xy.tolist(),
-        "w_z": steps.tolist(),
-        "w_nxy": steps_xy.tolist(),
-        "w_nz": steps.tolist(),
-        "w_slope": steps.tolist()
+        "w_xy": steps_xy,
+        "w_z": steps,
+        "w_nxy": steps_xy,
+        "w_nz": steps,
+        "w_slope": steps
     }
 
     results = grid_search_weights(df_clean, weight_grid)
